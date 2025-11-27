@@ -54,9 +54,11 @@
 
     <div class="max-w-4xl mx-auto bg-white shadow-2xl rounded-xl p-6 md:p-10">
 
-        <div class="flex justify-between items-center mb-6 border-b pb-2">
+        <div class="flex items-center mb-6 border-b pb-4">
+            <img src="REVOV-TM-Logo-home.webp" alt="REVOV Logo" class="h-20 w-auto object-contain mr-6">
             <h1 class="text-3xl font-bold text-gray-800">24V Battery Assessment Report</h1>
         </div>
+
         <p class="text-gray-600 mb-8">Fill out the details below and click "Download PDF" to save the report.</p>
 
         <div id="status_message" class="mt-4 mb-4 p-3 hidden rounded-lg text-sm transition-all duration-300 flex items-center justify-between">
@@ -140,7 +142,7 @@
                     </div>
                 </div>
                 
-                </div>
+            </div>
 
             <div class="report-section">
                 <h2 class="text-2xl font-semibold text-indigo-700 mb-6">3. Charge & Discharge Tests</h2>
@@ -250,10 +252,31 @@
                                 <span>Category</span>
                                 <span>Score (Max)</span>
                             </div>
-                            <div class="flex justify-between py-1"><span>Voltage Consistency</span><span id="score_voltage" class="font-mono text-black font-bold">0 / 4</span></div>
-                            <div class="flex justify-between py-1"><span>Charge Test</span><span id="score_charge" class="font-mono text-black font-bold">0 / 2</span></div>
-                            <div class="flex justify-between py-1"><span>Discharge Test</span><span id="score_discharge" class="font-mono text-black font-bold">0 / 2</span></div>
-                            <div class="flex justify-between font-bold text-lg pt-2 border-t mt-2 text-indigo-700">
+                        
+                            <div class="flex justify-between py-1 items-center">
+                                <span>Voltage Consistency</span>
+                                <span id="score_voltage" class="font-mono text-black font-bold">0 / 4</span>
+                            </div>
+                        
+                            <div class="flex justify-between py-1 items-center">
+                                <span>Charge Test</span>
+                                <div class="flex items-center">
+                                    <input type="number" id="manual_score_charge" value="0" min="0" max="2" oninput="updateScoreSummary()" 
+                                           class="w-12 text-center rounded border-gray-300 shadow-sm p-1 text-sm font-bold text-black mr-1">
+                                    <span class="font-mono text-gray-600 font-bold">/ 2</span>
+                                </div>
+                            </div>
+                        
+                            <div class="flex justify-between py-1 items-center">
+                                <span>Discharge Test</span>
+                                <div class="flex items-center">
+                                    <input type="number" id="manual_score_discharge" value="0" min="0" max="2" oninput="updateScoreSummary()" 
+                                           class="w-12 text-center rounded border-gray-300 shadow-sm p-1 text-sm font-bold text-black mr-1">
+                                    <span class="font-mono text-gray-600 font-bold">/ 2</span>
+                                </div>
+                            </div>
+                        
+                            <div class="flex justify-between font-bold text-lg pt-2 border-t mt-2 text-indigo-700 items-center">
                                 <span>TOTAL SCORE</span>
                                 <span id="score_total" class="font-mono text-black font-bold">0 / 8</span>
                             </div>
@@ -391,32 +414,34 @@
         }
 
         function updateScoreSummary() {
-            const getScore = (id) => parseInt(document.getElementById(id)?.value) || 0;
-            
-            const scores = {
-                voltage_ocv: parseInt(document.querySelector('input[name="ocv_score_input"]')?.value) || 0,
-                voltage_spread: parseInt(document.querySelector('input[name="volt_spread_score_input"]')?.value) || 0,
-                // Resistance scores removed
-                charge: getScore('charge_score_input'),
-                discharge: getScore('discharge_score_input'),
-            };
+            // 1. Calculate Voltage Score (Automatic from Section 2)
+            const voltageOcv = parseInt(document.querySelector('input[name="ocv_score_input"]')?.value) || 0;
+            const voltageSpread = parseInt(document.querySelector('input[name="volt_spread_score_input"]')?.value) || 0;
+            const totalVoltage = voltageOcv + voltageSpread;
 
-            const totalVoltage = scores.voltage_ocv + scores.voltage_spread;
-            // Total score calculation updated (removed resistance)
-            const totalScore = totalVoltage + scores.charge + scores.discharge;
+            // 2. Get Charge/Discharge Scores (MANUAL INPUTS from Section 5.1)
+            let chargeScore = parseInt(document.getElementById('manual_score_charge')?.value) || 0;
+            let dischargeScore = parseInt(document.getElementById('manual_score_discharge')?.value) || 0;
 
-            // Helper to safely update text
+            // Enforce max limits (0-2)
+            if(chargeScore > 2) chargeScore = 2;
+            if(dischargeScore > 2) dischargeScore = 2;
+            if(chargeScore < 0) chargeScore = 0;
+            if(dischargeScore < 0) dischargeScore = 0;
+
+            // 3. Calculate Total
+            const totalScore = totalVoltage + chargeScore + dischargeScore;
+
+            // 4. Update the Display Text
             const setText = (id, text) => {
                 const el = document.getElementById(id);
                 if(el) el.textContent = text;
             };
 
             setText('score_voltage', `${totalVoltage} / 4`);
-            // Resistance display removed
-            setText('score_charge', `${scores.charge} / 2`);
-            setText('score_discharge', `${scores.discharge} / 2`);
-            setText('score_total', `${totalScore} / 8`); // Max score updated to 8
+            setText('score_total', `${totalScore} / 8`);
 
+            // 5. Update Color Banding (Excellent/Acceptable/Poor)
             document.querySelectorAll('#banding_list li').forEach(li => {
                 li.classList.remove('bg-indigo-100', 'ring-2', 'ring-indigo-500');
                 const range = li.getAttribute('data-range').split('-');
@@ -427,6 +452,16 @@
                     li.classList.add('bg-indigo-100', 'ring-2', 'ring-indigo-500');
                 }
             });
+
+            // 6. Automatic PASS/FAIL Selection
+            const overallPass = document.querySelector('input[name="overall_result_radio"][value="PASS"]');
+            const overallFail = document.querySelector('input[name="overall_result_radio"][value="FAIL"]');
+            
+            if (totalScore >= 5) {
+                if(overallPass) overallPass.checked = true;
+            } else {
+                if(overallFail) overallFail.checked = true;
+            }
         }
 
         // --- PDF PREPARATION FUNCTION ---
@@ -568,7 +603,7 @@
 
             const element = document.getElementById('report-content');
             // Add header to PDF content
-            const header = document.querySelector('h1').parentNode;
+            const header = document.querySelector('h1').parentNode; // This now grabs the container with LOGO + H1
             
             // Create a temporary container for PDF capture including header
             const pdfContainer = document.createElement('div');
