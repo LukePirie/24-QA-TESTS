@@ -694,16 +694,25 @@
                 });
             });
 
-            // Radio buttons for result scores
-            document.querySelectorAll('input[type="radio"]').forEach(radio => {
-                radio.addEventListener('change', function() {
-                     const group = this.closest('div[data-category]');
-                     if(group) {
-                         const score = this.getAttribute('data-score');
-                         const hiddenInput = group.querySelector('input[type="hidden"]');
-                         if(hiddenInput && score) hiddenInput.value = score;
-                         updateScoreSummary();
-                     }
+            // NEW LOGIC: LINK 0.2C PASS/FAIL TO SCORE BOX
+            document.querySelectorAll('input[name="result_02c"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    const targetInput = document.getElementById('manual_score_charge');
+                    if(targetInput) {
+                        targetInput.value = (e.target.value === 'PASS') ? 2 : 0;
+                        updateScoreSummary();
+                    }
+                });
+            });
+
+            // NEW LOGIC: LINK 0.5C PASS/FAIL TO SCORE BOX
+            document.querySelectorAll('input[name="result_05c"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    const targetInput = document.getElementById('manual_score_discharge');
+                    if(targetInput) {
+                        targetInput.value = (e.target.value === 'PASS') ? 2 : 0;
+                        updateScoreSummary();
+                    }
                 });
             });
             
