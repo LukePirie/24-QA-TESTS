@@ -17,18 +17,26 @@
         .spinner { border: 4px solid rgba(255, 255, 255, 0.3); border-top: 4px solid #fff; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* NEW PDF STYLES: This class is applied during PDF generation to hide interactive elements */
-        .pdf-mode input, 
-        .pdf-mode select, 
-        .pdf-mode button,
+        /* CRUCIAL FIX: Styles to make inputs look like static text in the PDF without destroying the layout */
+        .pdf-mode input[type="text"], 
+        .pdf-mode input[type="number"], 
+        .pdf-mode input[type="date"],
+        .pdf-mode textarea,
+        .pdf-mode select {
+            border: none !important;
+            box-shadow: none !important;
+            background-color: transparent !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+
+        /* Hide all interactive elements in PDF mode */
         .pdf-mode .score-button,
         .pdf-mode .file-input,
+        .pdf-mode .preview-box,
+        .pdf-mode input[type="radio"],
         .pdf-mode #status_message {
             display: none !important;
-        }
-        /* Ensure the preview div still shows the image content in PDF */
-        .pdf-mode .preview-box {
-            display: none !important; /* Hide preview box, images are moved to appendix */
         }
     </style>
 </head>
@@ -127,7 +135,7 @@
                             <div><label class="text-xs font-semibold text-gray-500">Disch. Current (A)</label><input type="number" id="disch_current_02c" class="block w-full border-gray-300 p-2 text-black font-bold"></div>
                             <div><label class="text-xs font-semibold text-gray-500">Ah Delivered</label><input type="number" id="ah_delivered_02c" class="block w-full border-gray-300 p-2 text-black font-bold"></div>
                         </div>
-                        <div class="flex items-center space-x-4 border-t pt-3">
+                        <div class="flex items-center space-x-4 border-t pt-3 test-result-section">
                             <span class="text-sm font-semibold">Result:</span>
                             <label><input type="radio" name="result_02c" value="PASS" class="mr-1"><span class="text-green-700 font-bold">PASS</span></label>
                             <label><input type="radio" name="result_02c" value="FAIL" class="mr-1"><span class="text-red-700 font-bold">FAIL</span></label>
@@ -147,7 +155,7 @@
                             <div><label class="text-xs font-semibold text-gray-500">Temp Rise (°C)</label><input type="number" id="temp_rise_05c" class="block w-full border-gray-300 p-2 text-black font-bold"></div>
                             <div><label class="text-xs font-semibold text-gray-500">Stability</label><select id="stability_05c" class="block w-full border-gray-300 p-2 text-black font-bold"><option value="">Select...</option><option value="Stable">Stable</option><option value="Unstable">Unstable</option></select></div>
                         </div>
-                        <div class="flex items-center space-x-4 border-t pt-3">
+                        <div class="flex items-center space-x-4 border-t pt-3 test-result-section">
                             <span class="text-sm font-semibold">Result:</span>
                             <label><input type="radio" name="result_05c" value="PASS" class="mr-1"><span class="text-green-700 font-bold">PASS</span></label>
                             <label><input type="radio" name="result_05c" value="FAIL" class="mr-1"><span class="text-red-700 font-bold">FAIL</span></label>
@@ -202,7 +210,7 @@
             
             <div id="image-appendix" style="display: none;">
                 <div style="page-break-before: always;"></div>
-                <h2 style="text-align:center; margin-bottom: 30px; border-bottom: 1px solid #ccc; font-size: 18pt; font-family: Arial, sans-serif; padding-top: 30px;">Appendix: Evidence Photos</h2>
+                <h2 style="text-align:center; margin-bottom: 30px; border-bottom: 1px solid #ccc; font-size: 18pt; font-family: 'Inter', sans-serif; padding-top: 30px;">Appendix: Evidence Photos</h2>
                 </div>
         </div>
 
@@ -216,8 +224,8 @@
         const images = {
             battery: null,
             rating: null,
-            cell: null, // NEW
-            bms: null   // NEW
+            cell: null, 
+            bms: null   
         };
         const imageTitles = {
             battery: '1. Battery Physical Photo',
@@ -226,7 +234,7 @@
             bms: '4. BMS History'
         };
 
-        // IMAGE HANDLING
+        // IMAGE HANDLING (UNCHANGED)
         function setupImageInput(inputId, previewId, key) {
             const input = document.getElementById(inputId);
             if(!input) return;
@@ -246,7 +254,7 @@
         setupImageInput('photo_cell', 'preview_cell', 'cell'); 
         setupImageInput('photo_bms', 'preview_bms', 'bms');    
 
-        // SCORING LOGIC (Keep existing logic)
+        // SCORING LOGIC (UNCHANGED)
         function updateScoreSummary() {
             const vOcv = parseInt(document.querySelector('input[name="ocv_score_input"]')?.value) || 0;
             const vSpread = parseInt(document.querySelector('input[name="volt_spread_score_input"]')?.value) || 0;
@@ -304,92 +312,88 @@
         document.getElementById('nominal_ah').addEventListener('input', calcCap);
 
 
-        // --- CORRECTED PDF GENERATION LOGIC ---
+        // --- FINAL PROFESSIONAL PDF GENERATION LOGIC ---
         function generateCleanPDF() {
             const statusDiv = document.getElementById('status_message');
             statusDiv.classList.remove('hidden');
             statusDiv.querySelector('span').innerText = "Generating PDF...";
             const container = document.getElementById('report-content');
+            const serialNumber = document.getElementById('serial_number').value || 'Unknown';
 
-            // 1. CLONE & CLEAN THE REPORT CONTENT
+            // 1. CLONE & STYLIZE THE REPORT CONTENT FOR PDF
             const pdfContent = container.cloneNode(true);
             pdfContent.id = 'pdf-clone';
             pdfContent.style.visibility = 'hidden';
             pdfContent.classList.add('pdf-mode'); // Apply the PDF-specific CSS
 
-            // Function to insert text value into the DOM structure for PDF
-            const replaceInputWithValue = (input, container, label) => {
-                if (input && container) {
-                    const value = input.value || '-';
-                    // Find the label element (sibling of the input/container) and wrap the value in a span to keep styling
-                    const valueElement = document.createElement('span');
-                    valueElement.style.fontWeight = 'bold';
-                    valueElement.style.color = '#1f2937';
-                    valueElement.innerText = value;
-                    container.appendChild(valueElement);
-                    // Hide the original input/select/textarea
-                    input.style.display = 'none';
-                    if (label) {
-                        label.style.display = 'inline'; // Keep the label visible
-                    }
-                }
-            };
-
-            // Process form elements in the clone
+            // A. Prepare input fields to look like static text by keeping values and removing borders
             pdfContent.querySelectorAll('input, select, textarea').forEach(el => {
-                // Ignore the image file inputs as they are handled in the appendix
-                if (el.type === 'file' || el.name.includes('score_input')) return; 
+                // Ignore elements that are handled separately (hidden, or results)
+                if (el.type === 'file' || el.name.includes('score_input')) return;
+                if (el.type === 'radio') return;
 
-                const parentLabel = el.closest('label');
-                const parentDiv = el.parentNode;
+                // For all visible form inputs/textareas, remove the styling
+                el.style.border = 'none';
+                el.style.boxShadow = 'none';
+                el.style.backgroundColor = 'transparent';
+                el.style.padding = '0';
+                el.style.height = 'auto';
+                el.style.resize = 'none'; 
+            });
+            
+            // B. Replace score buttons with static score text
+            pdfContent.querySelectorAll('.score-row').forEach(row => {
+                const scoreDiv = row.querySelector('[data-category]');
+                const hiddenScoreInput = scoreDiv.querySelector('input[type="hidden"]');
+                const scoreValue = hiddenScoreInput.value;
+                // Find the text of the selected button (e.g., "Good (2)" -> "Good")
+                const selectedButton = row.querySelector(`.score-button[data-score="${scoreValue}"]`);
+                const scoreText = selectedButton ? selectedButton.innerText.replace(/\s\(\d\)/, '') : 'Poor'; 
 
-                // For text/number inputs and textareas
-                if (el.type !== 'radio') {
-                    replaceInputWithValue(el, parentLabel || parentDiv);
-                }
+                // Determine color based on score
+                const scoreColor = scoreValue === '2' ? '#047857' : scoreValue === '1' ? '#d97706' : '#b91c1c';
                 
-                // For radio buttons (Pass/Fail)
-                if (el.type === 'radio' && el.checked) {
-                    const resultSpan = document.createElement('span');
-                    resultSpan.style.fontWeight = 'bold';
-                    resultSpan.innerText = el.value;
-                    const resultContainer = parentDiv.querySelector('.flex.space-x-4');
-                    if(resultContainer) {
-                         // Remove the radio button container and replace with the result text
-                         resultContainer.parentElement.innerHTML = `<span style="font-size: 0.875rem; font-weight: 600;">Result:</span> <span style="font-weight: bold; color: ${el.value === 'PASS' ? '#047857' : '#b91c1c'};">${el.value}</span>`;
-                    } else if (parentDiv.querySelector('input[name="overall_result_radio"]')) {
-                        // Handle overall result
-                        parentDiv.innerHTML = `<span style="font-weight: bold; color: #374151;">Overall Result:</span><span style="font-weight: bold; color: ${el.value === 'PASS' ? '#047857' : '#b91c1c'}; margin-left: 1rem;">${el.value}</span>`;
-                    }
+                // Replace the entire button container with the styled score text
+                scoreDiv.innerHTML = `<span style="font-weight: bold; color: ${scoreColor}; font-size: 0.75rem;">${scoreText} (${scoreValue})</span>`;
+            });
+            
+            // C. Replace Pass/Fail radio buttons with final result text
+            pdfContent.querySelectorAll('.test-result-section, #overall_result .flex.space-x-4').forEach(container => {
+                const checkedRadio = container.querySelector('input[type="radio"]:checked');
+                if (checkedRadio) {
+                    const resultValue = checkedRadio.value;
+                    const resultColor = resultValue === 'PASS' ? '#047857' : '#b91c1c';
+                    container.innerHTML = `<span style="font-weight: 600; font-size: 0.875rem;">Result:</span><span style="font-weight: bold; color: ${resultColor}; margin-left: 1rem;">${resultValue}</span>`;
                 }
             });
+
 
             // 2. BUILD THE IMAGE APPENDIX CONTENT
             const appendixDiv = document.getElementById('image-appendix');
             const appendixClone = appendixDiv.cloneNode(true);
-            appendixClone.style.display = 'block'; // Make visible for PDF
-            appendixClone.innerHTML = appendixDiv.innerHTML; // Keep the Appendix title
+            appendixClone.style.display = 'block'; 
+            appendixClone.innerHTML = appendixDiv.innerHTML; 
+
+            const imageKeys = ['battery', 'rating', 'cell', 'bms'];
 
             // Add Images to the Appendix
-            const addImg = (title, data, isBreak) => {
+            const addImg = (title, data) => {
                 if(data) {
-                    if(isBreak) {
-                        // Force a break every 2 images for clean layout
-                        appendixClone.innerHTML += `<div style="page-break-before: always;"></div>`;
-                    }
                     appendixClone.innerHTML += `
-                        <div style="margin-bottom: 50px; text-align: center; page-break-inside: avoid; font-family: Arial, sans-serif;">
-                            <div style="background:#333; color:#fff; padding: 8px; font-weight:bold; margin-bottom:10px; font-size: 12pt;">${title}</div>
-                            <img src="${data}" style="max-width: 100%; height: auto; max-height: 700px; border: 1px solid #ccc; display: block; margin: 0 auto;">
+                        <div style="page-break-before: always; padding-top: 30px; font-family: 'Inter', sans-serif;">
+                            <div style="margin-bottom: 50px; text-align: center; page-break-inside: avoid;">
+                                <div style="background:#333; color:#fff; padding: 8px; font-weight:bold; margin-bottom:10px; font-size: 12pt;">${title}</div>
+                                <img src="${data}" style="max-width: 95%; height: auto; max-height: 9.5in; border: 1px solid #ccc; display: block; margin: 0 auto;">
+                            </div>
                         </div>
                     `;
                 }
             };
             
-            addImg(imageTitles.battery, images.battery, false);
-            addImg(imageTitles.rating, images.rating, (images.battery ? true : false)); // Break after first image if it exists
-            addImg(imageTitles.cell, images.cell, (images.battery || images.rating ? true : false)); // Break after third image if previous ones exist
-            addImg(imageTitles.bms, images.bms, (images.battery || images.rating || images.cell ? true : false)); // Break after fourth image if previous ones exist
+            // Add images, each on a new page for maximum clarity and no cut-offs
+            imageKeys.forEach(key => {
+                addImg(imageTitles[key], images[key]);
+            });
 
             // Append the styled appendix to the main report clone
             pdfContent.appendChild(appendixClone);
@@ -399,9 +403,11 @@
 
             const opt = {
                 margin:       0.5,
-                filename:     `Battery_Report_${document.getElementById('serial_number').value || 'Unknown'}.pdf`,
+                // FIX: Use BATT-24V prefix and serial number for the filename
+                filename:     `BATT-24V-${serialNumber}.pdf`, 
                 image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2 }, // Ensures high image quality
+                // Use a higher scale to better capture Tailwind CSS design details for a professional look
+                html2canvas:  { scale: 3, logging: false, useCORS: true }, 
                 jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
             };
 
@@ -409,6 +415,11 @@
                 // Clean up the clone and status message
                 pdfContent.remove();
                 statusDiv.classList.add('hidden');
+            }).catch(error => {
+                console.error("PDF generation error:", error);
+                statusDiv.querySelector('span').innerText = "Error generating PDF. Check console for details.";
+                statusDiv.classList.remove('bg-indigo-100', 'text-indigo-700');
+                statusDiv.classList.add('bg-red-100', 'text-red-700');
             });
         }
     </script>
