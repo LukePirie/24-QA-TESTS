@@ -18,9 +18,7 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         /* CRUCIAL FIX: Styles to make inputs look like static text in the PDF without destroying the layout */
-        .pdf-mode input[type="text"], 
-        .pdf-mode input[type="number"], 
-        .pdf-mode input[type="date"],
+        .pdf-mode input:not([type="radio"]):not([type="file"]):not([type="hidden"]), 
         .pdf-mode textarea,
         .pdf-mode select {
             border: none !important;
@@ -28,14 +26,18 @@
             background-color: transparent !important;
             padding-left: 0 !important;
             padding-right: 0 !important;
+            /* Ensure text value is visible even if the input is technically still there */
+            color: #1f2937 !important; 
+            font-weight: bold !important;
         }
 
         /* Hide all interactive elements in PDF mode */
         .pdf-mode .score-button,
         .pdf-mode .file-input,
         .pdf-mode .preview-box,
-        .pdf-mode input[type="radio"],
-        .pdf-mode #status_message {
+        .pdf-mode input[type="radio"] + span, /* Hides the label text next to radio */
+        .pdf-mode #status_message,
+        .pdf-mode .test-result-section label {
             display: none !important;
         }
     </style>
@@ -57,7 +59,6 @@
         </div>
 
         <div id="report-content" class="space-y-8">
-
             <div class="report-section">
                 <h2 class="text-2xl font-semibold text-indigo-700 mb-4">1. Identification & Rating</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -254,7 +255,7 @@
         setupImageInput('photo_cell', 'preview_cell', 'cell'); 
         setupImageInput('photo_bms', 'preview_bms', 'bms');    
 
-        // SCORING LOGIC (UNCHANGED)
+        // SCORING AND LOGIC (UNCHANGED)
         function updateScoreSummary() {
             const vOcv = parseInt(document.querySelector('input[name="ocv_score_input"]')?.value) || 0;
             const vSpread = parseInt(document.querySelector('input[name="volt_spread_score_input"]')?.value) || 0;
@@ -311,7 +312,6 @@
         document.getElementById('ah_delivered_02c').addEventListener('input', calcCap);
         document.getElementById('nominal_ah').addEventListener('input', calcCap);
 
-
         // --- FINAL PROFESSIONAL PDF GENERATION LOGIC ---
         function generateCleanPDF() {
             const statusDiv = document.getElementById('status_message');
@@ -323,32 +323,26 @@
             // 1. CLONE & STYLIZE THE REPORT CONTENT FOR PDF
             const pdfContent = container.cloneNode(true);
             pdfContent.id = 'pdf-clone';
-            pdfContent.style.visibility = 'hidden';
+            
+            // CRITICAL FIX: Move off-screen instead of setting visibility: hidden
+            pdfContent.style.position = 'fixed';
+            pdfContent.style.left = '-9999px';
+            pdfContent.style.top = '0';
+
             pdfContent.classList.add('pdf-mode'); // Apply the PDF-specific CSS
 
-            // A. Prepare input fields to look like static text by keeping values and removing borders
-            pdfContent.querySelectorAll('input, select, textarea').forEach(el => {
-                // Ignore elements that are handled separately (hidden, or results)
-                if (el.type === 'file' || el.name.includes('score_input')) return;
-                if (el.type === 'radio') return;
-
-                // For all visible form inputs/textareas, remove the styling
-                el.style.border = 'none';
-                el.style.boxShadow = 'none';
-                el.style.backgroundColor = 'transparent';
-                el.style.padding = '0';
-                el.style.height = 'auto';
-                el.style.resize = 'none'; 
-            });
-            
-            // B. Replace score buttons with static score text
+            // A. Replace score buttons with static score text
             pdfContent.querySelectorAll('.score-row').forEach(row => {
                 const scoreDiv = row.querySelector('[data-category]');
                 const hiddenScoreInput = scoreDiv.querySelector('input[type="hidden"]');
-                const scoreValue = hiddenScoreInput.value;
-                // Find the text of the selected button (e.g., "Good (2)" -> "Good")
+                const scoreValue = hiddenScoreInput ? hiddenScoreInput.value : '0';
+                
+                // Get the text of the selected score, or default
+                let scoreText = 'Poor'; 
                 const selectedButton = row.querySelector(`.score-button[data-score="${scoreValue}"]`);
-                const scoreText = selectedButton ? selectedButton.innerText.replace(/\s\(\d\)/, '') : 'Poor'; 
+                if (selectedButton) {
+                    scoreText = selectedButton.innerText.replace(/\s\(\d\)/, '');
+                }
 
                 // Determine color based on score
                 const scoreColor = scoreValue === '2' ? '#047857' : scoreValue === '1' ? '#d97706' : '#b91c1c';
@@ -357,13 +351,21 @@
                 scoreDiv.innerHTML = `<span style="font-weight: bold; color: ${scoreColor}; font-size: 0.75rem;">${scoreText} (${scoreValue})</span>`;
             });
             
-            // C. Replace Pass/Fail radio buttons with final result text
+            // B. Replace Pass/Fail radio buttons with final result text
             pdfContent.querySelectorAll('.test-result-section, #overall_result .flex.space-x-4').forEach(container => {
                 const checkedRadio = container.querySelector('input[type="radio"]:checked');
                 if (checkedRadio) {
                     const resultValue = checkedRadio.value;
                     const resultColor = resultValue === 'PASS' ? '#047857' : '#b91c1c';
-                    container.innerHTML = `<span style="font-weight: 600; font-size: 0.875rem;">Result:</span><span style="font-weight: bold; color: ${resultColor}; margin-left: 1rem;">${resultValue}</span>`;
+                    
+                    // Check if it's the main test result section
+                    if (container.classList.contains('test-result-section')) {
+                        // Replace the entire contents of the flex container after the "Result:" span
+                        container.innerHTML = `<span style="font-weight: 600; font-size: 0.875rem;">Result:</span> <span style="font-weight: bold; color: ${resultColor}; margin-left: 1rem;">${resultValue}</span>`;
+                    } else {
+                        // Handle overall result container
+                        container.innerHTML = `<span style="font-weight: bold; color: #374151;">Overall Result:</span><span style="font-weight: bold; color: ${resultColor}; margin-left: 1rem;">${resultValue}</span>`;
+                    }
                 }
             });
 
@@ -403,10 +405,8 @@
 
             const opt = {
                 margin:       0.5,
-                // FIX: Use BATT-24V prefix and serial number for the filename
                 filename:     `BATT-24V-${serialNumber}.pdf`, 
                 image:        { type: 'jpeg', quality: 0.98 },
-                // Use a higher scale to better capture Tailwind CSS design details for a professional look
                 html2canvas:  { scale: 3, logging: false, useCORS: true }, 
                 jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
             };
@@ -417,7 +417,8 @@
                 statusDiv.classList.add('hidden');
             }).catch(error => {
                 console.error("PDF generation error:", error);
-                statusDiv.querySelector('span').innerText = "Error generating PDF. Check console for details.";
+                // Fail gracefully in the UI
+                statusDiv.querySelector('span').innerText = "Error generating PDF. Please ensure all required fields are filled and try again.";
                 statusDiv.classList.remove('bg-indigo-100', 'text-indigo-700');
                 statusDiv.classList.add('bg-red-100', 'text-red-700');
             });
